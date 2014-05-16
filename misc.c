@@ -29,16 +29,6 @@
 #include <netinet/in.h>
 #include "l2tp.h"
 
-/* prevent deadlock that occurs when a signal handler, which interrupted a
- * call to syslog(), attempts to call syslog(). */
-static int syslog_nesting = 0;
-#define SYSLOG_CALL(code) do {      \
-    if (++syslog_nesting < 2) {     \
-        code;                       \
-    }                               \
-    --syslog_nesting;               \
-} while(0)
-
 char ipaddy_buf[1024];
 socklen_t ipaddr_len = sizeof(ipaddy_buf);
 
@@ -49,6 +39,17 @@ int sockaddr_cmp(struct in6_addr a1, struct in6_addr a2) {
             return a1.s6_addr[i] - a2.s6_addr[i];
     return 0;
 }
+
+
+/* prevent deadlock that occurs when a signal handler, which interrupted a
+ * call to syslog(), attempts to call syslog(). */
+static int syslog_nesting = 0;
+#define SYSLOG_CALL(code) do {      \
+    if (++syslog_nesting < 2) {     \
+        code;                       \
+    }                               \
+    --syslog_nesting;               \
+} while(0)
 
 void init_log()
 {
@@ -62,7 +63,7 @@ void init_log()
 
 void l2tp_log (int level, const char *fmt, ...)
 {
-    char buf[256];
+    char buf[2048];
     va_list args;
     va_start (args, fmt);
     vsnprintf (buf, sizeof (buf), fmt, args);
@@ -126,7 +127,7 @@ void bufferDump (unsigned char *buf, int buflen)
         c = line;
         for (j = 0; j < bufferDumpWIDTH; j++)
         {
-	  sprintf (c, "%02x ", (buf[i * bufferDumpWIDTH + j]) & 0xff);
+	  sprintf (c, "%02x", (buf[i * bufferDumpWIDTH + j]) & 0xff);
             c++;
             c++;                /* again two characters to display ONE byte */
         }
@@ -139,7 +140,7 @@ void bufferDump (unsigned char *buf, int buflen)
     c = line;
     for (j = 0; j < buflen % bufferDumpWIDTH; j++)
     {
-        sprintf (c, "%02x ",
+        sprintf (c, "%02x",
                  buf[(buflen / bufferDumpWIDTH) * bufferDumpWIDTH +
                      j] & 0xff);
         c++;

@@ -42,11 +42,11 @@ int init_network (void)
     long arg;
     unsigned int length = sizeof (server);
     gethostname (hostname, sizeof (hostname));
-    server.sin6_family = AF_INET6;
-    //server.sin6_addr.s_addr = gconfig.listenaddr; 
-    server.sin6_addr = in6addr_any;
-    server.sin6_port = htons (gconfig.port);
-    if ((server_socket = socket (PF_INET6, SOCK_DGRAM, 0)) < 0)
+	server.sin6_family = AF_INET6;
+	//server.sin6_addr.s_addr = gconfig.listenaddr; 
+	server.sin6_addr = in6addr_any;
+	server.sin6_port = htons (gconfig.port);
+	if ((server_socket = socket (PF_INET6, SOCK_DGRAM, 0)) < 0)
     {
         l2tp_log (LOG_CRIT, "%s: Unable to allocate socket. Terminating.\n",
              __FUNCTION__);
@@ -73,9 +73,9 @@ int init_network (void)
      * values.
      */
     arg=1;
-    if(setsockopt(server_socket, IPPROTO_IP, IP_IPSEC_REFINFO,
+    if(setsockopt(server_socket, IPPROTO_IP, gconfig.sarefnum,
 		  &arg, sizeof(arg)) != 0) {
-	    l2tp_log(LOG_CRIT, "setsockopt recvref[%d]: %s\n", IP_IPSEC_REFINFO, strerror(errno));
+	    l2tp_log(LOG_CRIT, "setsockopt recvref[%d]: %s\n", gconfig.sarefnum, strerror(errno));
 
 	    gconfig.ipsecsaref=0;
     }
@@ -155,7 +155,7 @@ inline void fix_hdr (void *buf)
     {
         int len = 6;
         if (PSBIT (ver))
-            len += 4;
+            len += 2;
         if (PLBIT (ver))
             len += 2;
         if (PFBIT (ver))
@@ -237,9 +237,9 @@ void control_xmit (void *b)
                 strcpy (t->self->errormsg, "Timeout");
                 t->self->needclose = -1;
             }
+	    call_close(t->self);
         }
-	free(buf->rstart);
-	free(buf);
+	toss (buf);
     }
     else
     {
@@ -279,11 +279,11 @@ void udp_xmit (struct buffer *buf, struct tunnel *t)
 
 	cmsg = CMSG_FIRSTHDR(&msgh);
 	cmsg->cmsg_level = IPPROTO_IP;
-	cmsg->cmsg_type  = IP_IPSEC_REFINFO;
+	cmsg->cmsg_type  = gconfig.sarefnum;
 	cmsg->cmsg_len   = CMSG_LEN(sizeof(unsigned int));
 
 	if(gconfig.debug_network) {
-		l2tp_log(LOG_DEBUG,"sending with saref=%d\n", t->refhim);
+		l2tp_log(LOG_DEBUG,"sending with saref=%d using sarefnum=%d\n", t->refhim, gconfig.sarefnum);
 	}
 	refp = (unsigned int *)CMSG_DATA(cmsg);
 	*refp = t->refhim;
@@ -306,7 +306,7 @@ void udp_xmit (struct buffer *buf, struct tunnel *t)
     /* Receive one packet. */
     if ((err = sendmsg(server_socket, &msgh, 0)) < 0) {
 	l2tp_log(LOG_ERR, "udp_xmit failed to %s:%d with err=%d:%s\n",
-		 IPADDY(t->peer.sin_addr), ntohs(t->peer.sin_port),
+		 IPADDY(t->peer.sin6_addr), ntohs(t->peer.sin6_port),
 		 err,strerror(errno));
     }
 }
@@ -488,7 +488,7 @@ void network_thread ()
 			 cmsg != NULL;
 			 cmsg = CMSG_NXTHDR(&msgh,cmsg)) {
 			    if (cmsg->cmsg_level == IPPROTO_IP
-				&& cmsg->cmsg_type == IP_IPSEC_REFINFO) {
+				&& cmsg->cmsg_type == gconfig.sarefnum) {
 				    unsigned int *refp;
 				    
 				    refp = (unsigned int *)CMSG_DATA(cmsg);
@@ -511,7 +511,7 @@ void network_thread ()
 	    {
 		l2tp_log(LOG_DEBUG, "%s: recv packet from %s, size = %d, "
 			 "tunnel = %d, call = %d ref=%u refhim=%u\n",
-			 __FUNCTION__, IPADDY(from.sin6_addr),
+			 __FUNCTION__, IPADDY (from.sin6_addr),
 			 recvsize, tunnel, call, refme, refhim);
 	    }
 
